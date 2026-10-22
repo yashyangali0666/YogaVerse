@@ -1,0 +1,295 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum PoseCategory {
+  STANDING
+  SEATED
+  BALANCING
+  SUPINE
+  PRONE
+  INVERSION
+  RESTORATIVE
+}
+
+enum ProgramCategory {
+  MORNING
+  BEGINNERS
+  FLEXIBILITY
+  STRESS_RELIEF
+  DESK_BREAK
+  EVENING
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum EventType {
+  ONLINE
+  OFFLINE
+}
+
+enum RegistrationStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+enum SectionType {
+  WARMUP
+  MAIN
+  COOLDOWN
+}
+
+model User {
+  id               String              @id @default(cuid())
+  email            String              @unique
+  passwordHash     String
+  name             String
+  avatarUrl        String?
+  bio              String?
+  role             Role                @default(USER)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  goal             UserGoal?
+  sessions         PracticeSession[]
+  enrollments      ProgramEnrollment[]
+  registrations    EventRegistration[]
+  achievements     UserAchievement[]
+  resetTokens      PasswordResetToken[]
+  auditLogs        AuditLog[]
+
+  @@index([email])
+}
+
+model UserGoal {
+  id                     String      @id @default(cuid())
+  userId                 String      @unique
+  user                   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyMinutesGoal       Int         @default(20)
+  weeklyDaysGoal         Int         @default(5)
+  targetExperienceLevel  Difficulty  @default(BEGINNER)
+  focusAreas             String      @default("Flexibility, Stress Relief")
+  updatedAt              DateTime    @updatedAt
+}
+
+model YogaPose {
+  id                  String         @id @default(cuid())
+  englishName         String
+  sanskritName        String
+  difficulty          Difficulty     @default(BEGINNER)
+  category            PoseCategory   @default(STANDING)
+  targetedBodyAreas   String         // Comma-separated list or JSON-string
+  durationSeconds     Int            @default(60)
+  instructions        String         @db.Text
+  breathingGuidance   String         @db.Text
+  benefits            String         @db.Text
+  contraindications   String         @db.Text
+  imageUrl            String
+  videoUrl            String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  programPoses        ProgramPose[]
+
+  @@index([difficulty])
+  @@index([category])
+}
+
+model YogaProgram {
+  id                   String              @id @default(cuid())
+  title                String
+  slug                 String              @unique
+  description          String              @db.Text
+  difficulty           Difficulty          @default(BEGINNER)
+  category             ProgramCategory     @default(BEGINNERS)
+  totalDurationMinutes Int                 @default(20)
+  imageUrl             String
+  isPublished          Boolean             @default(true)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  poses                ProgramPose[]
+  enrollments          ProgramEnrollment[]
+  sessions             PracticeSession[]
+
+  @@index([slug])
+  @@index([difficulty])
+  @@index([category])
+}
+
+model ProgramPose {
+  id                    String        @id @default(cuid())
+  programId             String
+  program               YogaProgram   @relation(fields: [programId], references: [id], onDelete: Cascade)
+  poseId                String
+  pose                  YogaPose      @relation(fields: [poseId], references: [id], onDelete: Cascade)
+  orderIndex            Int           @default(0)
+  customDurationSeconds Int?
+  section               SectionType   @default(MAIN)
+
+  @@unique([programId, poseId, orderIndex])
+  @@index([programId])
+  @@index([poseId])
+}
+
+model ProgramEnrollment {
+  id                String            @id @default(cuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programId         String
+  program           YogaProgram       @relation(fields: [programId], references: [id], onDelete: Cascade)
+  status            EnrollmentStatus  @default(ACTIVE)
+  progressPercent   Int               @default(0)
+  completedSessions Int               @default(0)
+  enrolledAt        DateTime          @default(now())
+  completedAt       DateTime?
+  lastPracticedAt   DateTime?
+
+  @@unique([userId, programId])
+  @@index([userId])
+  @@index([programId])
+}
+
+model PracticeSession {
+  id                    String       @id @default(cuid())
+  userId                String
+  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programId             String?
+  program               YogaProgram? @relation(fields: [programId], references: [id], onDelete: SetNull)
+  sessionTitle          String
+  durationSeconds       Int
+  targetDurationSeconds Int
+  completed             Boolean      @default(true)
+  startedAt             DateTime     @default(now())
+  completedAt           DateTime     @default(now())
+  notes                 String?
+
+  @@index([userId])
+  @@index([startedAt])
+}
+
+model Article {
+  id              String      @id @default(cuid())
+  title           String
+  slug            String      @unique
+  category        String      // "Yoga Basics", "Breathing Exercises", "Meditation Guides", "Myths vs Facts", "Yoga for Students", "Office Yoga", "Safety & Precautions"
+  summary         String      @db.Text
+  content         String      @db.Text
+  readTimeMinutes Int         @default(5)
+  author          String      @default("YogaLife Wellness Team")
+  imageUrl        String
+  isPublished     Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([slug])
+  @@index([category])
+}
+
+model Event {
+  id               String              @id @default(cuid())
+  title            String
+  description      String              @db.Text
+  eventType        EventType           @default(ONLINE)
+  venue            String
+  eventDate        DateTime
+  durationMinutes  Int                 @default(60)
+  instructorName   String
+  maxSeats         Int                 @default(50)
+  registeredSeats  Int                 @default(0)
+  imageUrl         String
+  isPublished      Boolean             @default(true)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  registrations    EventRegistration[]
+
+  @@index([eventDate])
+}
+
+model EventRegistration {
+  id           String             @id @default(cuid())
+  eventId      String
+  event        Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  registeredAt DateTime           @default(now())
+  status       RegistrationStatus @default(CONFIRMED)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@index([eventId])
+}
+
+model Achievement {
+  id          String            @id @default(cuid())
+  code        String            @unique
+  title       String
+  description String
+  badgeIcon   String
+  category    String            // STREAK, MINUTES, SESSIONS, PROGRAMS
+
+  users       UserAchievement[]
+
+  @@index([code])
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  unlockedAt    DateTime    @default(now())
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userEmail  String?
+  action     String
+  entityType String
+  entityId   String?
+  details    String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
